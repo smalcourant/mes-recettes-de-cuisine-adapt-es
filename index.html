@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MON LIVRE DE RECETTES PRO 👨‍🍳</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@700&display=swap');
+        body { font-family: 'Quicksand', sans-serif; background: #f0f9ff; color: #1e293b; overflow-x: hidden; }
+        .hidden { display: none !important; }
+        .btn-picto { font-size: 5rem; width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; background: white; border: 8px solid #f59e0b; border-radius: 9999px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); transition: all 0.2s; cursor: pointer; }
+        .btn-picto:hover { transform: scale(1.05); }
+        .photo-btn { background: #f1f5f9; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 15px; cursor: pointer; font-size: 1.5rem; border: 2px dashed #cbd5e1; overflow: hidden; position: relative; }
+        .photo-btn img { width: 100%; height: 100%; object-fit: cover; }
+        .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 100; width: 90px; height: 90px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; transition: all 0.2s; background: rgba(255, 255, 255, 0.9); box-shadow: 0 6px 20px rgba(0,0,0,0.15); border: none; }
+        .arrow-prev { left: 30px; border: 5px solid #cbd5e1; color: #64748b; }
+        .arrow-next { right: 30px; border: 5px solid #22c55e; color: #15803d; background: #dcfce7; }
+        .move-btn { background: #f8fafc; padding: 5px; border-radius: 8px; cursor: pointer; border: 1px solid #e2e8f0; }
+        .move-btn:hover { background: #e2e8f0; }
+
+        /* Loader */
+        #loader { position: fixed; inset: 0; background: #f0f9ff; display: flex; flex-col; align-items: center; justify-content: center; z-index: 9999; font-size: 1.5rem; font-weight: bold; color: #f97316; gap: 16px; }
+        .spinner { width: 50px; height: 50px; border: 6px solid #fed7aa; border-top-color: #f97316; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== IMPRESSION ===== */
+        #ecran-impression { display: none; }
+        @media print {
+            body > *:not(#ecran-impression) { display: none !important; }
+            #ecran-impression { display: block !important; position: absolute; top: 0; left: 0; width: 100%; padding: 20px; }
+            img { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; max-width: 100%; }
+        }
+        #ecran-impression { font-family: 'Quicksand', sans-serif; max-width: 900px; margin: 0 auto; }
+        .print-header { border-bottom: 4px solid #f59e0b; padding-bottom: 16px; margin-bottom: 24px; display: flex; align-items: center; gap: 24px; }
+        .print-cover { width: 120px; height: 120px; object-fit: cover; border-radius: 20px; border: 3px solid #fed7aa; }
+        .print-cover-placeholder { width: 120px; height: 120px; background: #fef3c7; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 3rem; border: 3px solid #fed7aa; }
+        .print-title { font-size: 2.5rem; font-weight: 900; color: #f97316; }
+        .print-section-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 2px solid currentColor; }
+        .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .print-col { background: #f8fafc; border-radius: 16px; padding: 16px; }
+        .print-item { padding: 6px 0; border-bottom: 1px solid #e2e8f0; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+        .print-item:last-child { border-bottom: none; }
+        .print-item img { width: 36px; height: 36px; object-fit: cover; border-radius: 8px; }
+        .print-etape { display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start; page-break-inside: avoid; }
+        .print-num { background: #dcfce7; color: #15803d; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.1rem; flex-shrink: 0; margin-top: 2px; }
+        .print-etape-text { flex: 1; font-size: 1.05rem; line-height: 1.6; }
+        .print-etape-img { width: 140px; height: 100px; object-fit: cover; border-radius: 12px; border: 2px solid #e2e8f0; flex-shrink: 0; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="loader"><div class="spinner"></div>Chargement des recettes…</div>
+
+    <div id="ecran-accueil" class="max-w-6xl mx-auto hidden">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-12 bg-white p-8 rounded-[40px] shadow-lg border-b-8 border-orange-400 gap-6">
+            <div>
+                <h1 class="text-5xl font-black text-orange-500 tracking-tight">MES RECETTES 📖</h1>
+                <p class="text-slate-400 font-bold mt-2">✨ Synchronisé & Accessible partout</p>
+            </div>
+            <div class="flex gap-4 flex-wrap justify-center">
+                <button onclick="ouvrirCreation()" class="btn-picto">➕</button>
+                <button onclick="document.getElementById('import-file').click()" class="btn-picto" style="border-color: #22c55e;">📂</button>
+                <button onclick="exportRecettes()" class="btn-picto" style="border-color: #3b82f6;">💾</button>
+                <input type="file" id="import-file" class="hidden" accept=".json" onchange="importerRecettes(this)">
+            </div>
+        </header>
+        <div id="liste-recettes" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+    </div>
+
+    <div id="ecran-form" class="max-w-4xl mx-auto hidden bg-white p-8 rounded-[40px] shadow-2xl border-t-8 border-blue-500">
+        <input type="hidden" id="edit-id">
+        <h2 class="text-4xl font-bold mb-8 text-blue-600">Préparer ma recette ✍️</h2>
+        <div class="space-y-6">
+            <div class="flex flex-col md:flex-row gap-6 items-center">
+                <div class="flex-1 w-full">
+                    <label class="block text-2xl font-bold mb-2 text-slate-700">Nom du plat</label>
+                    <input type="text" id="form-titre" class="w-full p-5 border-4 rounded-3xl text-2xl outline-none focus:border-blue-400" placeholder="Ex: Ma Tarte Tatin">
+                </div>
+                <div class="flex flex-col items-center">
+                    <label class="text-lg font-bold mb-2">Photo de couv'</label>
+                    <input type="file" id="input-img-principale" class="hidden" accept="image/*" onchange="traiterPhotoPrincipale(this)">
+                    <div id="preview-img-principale" onclick="document.getElementById('input-img-principale').click()" class="w-32 h-32 bg-slate-100 rounded-3xl border-4 border-dashed border-slate-300 flex items-center justify-center cursor-pointer overflow-hidden">
+                        <span class="text-4xl">📸</span>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div><h3 class="text-2xl font-bold mb-4 text-orange-500">🛒 Ingrédients</h3><div id="form-ing" class="space-y-3"></div><button onclick="ajouterLigne('form-ing')" class="mt-4 bg-orange-100 text-orange-600 px-6 py-2 rounded-xl font-bold">+ Ajouter</button></div>
+                <div><h3 class="text-2xl font-bold mb-4 text-blue-500">🥣 Matériel</h3><div id="form-mat" class="space-y-3"></div><button onclick="ajouterLigne('form-mat')" class="mt-4 bg-blue-100 text-blue-600 px-6 py-2 rounded-xl font-bold">+ Ajouter</button></div>
+            </div>
+            <div class="mt-8"><h3 class="text-2xl font-bold mb-4 text-green-500">👨‍🍳 Étapes</h3><div id="form-etp" class="space-y-4"></div><button onclick="ajouterLigneEtape()" class="mt-4 bg-green-100 text-green-600 px-6 py-2 rounded-xl font-bold">+ Ajouter une étape</button></div>
+        </div>
+        <div class="flex gap-4 mt-12">
+            <button onclick="basculer('ecran-accueil')" class="flex-1 bg-slate-200 p-6 rounded-3xl text-2xl font-bold">Annuler</button>
+            <button onclick="validerRecette()" class="flex-1 bg-green-500 text-white p-6 rounded-3xl text-2xl font-bold shadow-lg">ENREGISTRER ✅</button>
+        </div>
+    </div>
+
+    <div id="ecran-play" class="fixed inset-0 bg-white hidden flex flex-col">
+        <div class="p-4 bg-slate-50 flex justify-between items-center border-b-2 z-50">
+            <button onclick="basculer('ecran-accueil')" class="text-4xl">🏠</button>
+            <div id="play-progres" class="text-2xl font-bold text-slate-500 uppercase tracking-tighter"></div>
+            <button onclick="relancerVoix()" class="text-4xl">🔊</button>
+        </div>
+        <div class="flex-1 relative flex items-center justify-center overflow-hidden">
+            <button onclick="changerDiapo(-1)" class="nav-arrow arrow-prev">⬅️</button>
+            <button onclick="changerDiapo(1)" class="nav-arrow arrow-next">➡️</button>
+            <div id="play-zone" class="w-full h-full p-6 md:p-12"></div>
+        </div>
+    </div>
+
+    <div id="ecran-impression"></div>
+
+    <script>
+        // ===== CONFIG SUPABASE =====
+        const SUPABASE_URL = 'https://dbzrwpuiuuqwfqvlnkyz.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRienJ3cHVpdXVxd2Zxdmxua3l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2NzA0NDgsImV4cCI6MjA5NzI0NjQ0OH0.eDO59TGlcyGHAa_ljusBTcSoxd3IUlOmKm-is3UbNBg';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let recettes = [];
+        let recetteActuelle = null;
+        let diapoIndex = 0;
+        let photoPrincipaleData = "";
+
+        // ===== CHARGEMENT =====
+        async function chargerToutesLesRecettes() {
+            afficherLoader(true);
+            const { data: recs, error } = await sb.from('recettes').select('*').order('created_at');
+            if (error) { console.error(error); afficherLoader(false); return; }
+
+            recettes = await Promise.all(recs.map(async (rec) => {
+                const [{ data: ing }, { data: mat }, { data: etp }] = await Promise.all([
+                    sb.from('ingredients').select('*').eq('recette_id', rec.id).order('ordre'),
+                    sb.from('materiel').select('*').eq('recette_id', rec.id).order('ordre'),
+                    sb.from('etapes').select('*').eq('recette_id', rec.id).order('ordre'),
+                ]);
+                return {
+                    id: rec.id,
+                    titre: rec.titre,
+                    imgPrincipale: rec.img_principale || '',
+                    ingredients: (ing || []).map(i => ({ name: i.nom, img: i.img || '' })),
+                    materiel: (mat || []).map(m => ({ name: m.nom, img: m.img || '' })),
+                    etapes: (etp || []).map(e => ({ text: e.texte, img: e.img || '' })),
+                };
+            }));
+
+            afficherLoader(false);
+            afficherListe();
+        }
+
+        function afficherLoader(visible) {
+            document.getElementById('loader').style.display = visible ? 'flex' : 'none';
+            if (!visible) basculer('ecran-accueil');
+        }
+
+        // ===== AFFICHAGE LISTE =====
+        function afficherListe() {
+            const liste = document.getElementById('liste-recettes');
+            liste.innerHTML = '';
+            if (recettes.length === 0) {
+                liste.innerHTML = '<div class="col-span-3 text-center text-slate-400 text-2xl py-20">Aucune recette encore… Clique sur ➕ pour commencer !</div>';
+                return;
+            }
+            recettes.forEach((rec) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-[40px] shadow-xl border-4 border-orange-400 cursor-pointer hover:scale-105 transition overflow-hidden';
+                card.innerHTML = `
+                    <div class="h-48 bg-slate-100 flex items-center justify-center overflow-hidden border-b-4 border-orange-100">
+                        ${rec.imgPrincipale ? `<img src="${rec.imgPrincipale}" class="w-full h-full object-cover">` : `<span class="text-7xl">🥘</span>`}
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-2xl font-bold text-center text-slate-800 mb-6 truncate">${rec.titre}</h3>
+                        <div class="flex justify-between items-center bg-slate-50 p-4 rounded-3xl">
+                            <button onclick="event.stopPropagation(); editerRecette('${rec.id}');" class="text-3xl">✏️</button>
+                            <button onclick="event.stopPropagation(); lancerDiapo('${rec.id}');" class="text-3xl font-bold text-green-600">Lancer ▶️</button>
+                            <button onclick="event.stopPropagation(); imprimerRecette('${rec.id}');" class="text-3xl" title="Imprimer">🖨️</button>
+                            <button onclick="event.stopPropagation(); supprimerRecette('${rec.id}');" class="text-3xl">🗑️</button>
+                        </div>
+                    </div>`;
+                card.onclick = () => lancerDiapo(rec.id);
+                liste.appendChild(card);
+            });
+        }
+
+        // ===== FORMULAIRE =====
+        function ouvrirCreation() {
+            document.getElementById('edit-id').value = '';
+            document.getElementById('form-titre').value = '';
+            photoPrincipaleData = "";
+            document.getElementById('preview-img-principale').innerHTML = '<span class="text-4xl">📸</span>';
+            document.getElementById('form-ing').innerHTML = '';
+            document.getElementById('form-mat').innerHTML = '';
+            document.getElementById('form-etp').innerHTML = '';
+            ajouterLigne('form-ing'); ajouterLigne('form-mat'); ajouterLigneEtape();
+            basculer('ecran-form');
+        }
+
+        function ajouterLigne(id) {
+            const cont = document.getElementById(id);
+            const div = document.createElement('div');
+            div.className = 'flex items-center gap-2 bg-white p-2 rounded-2xl border';
+            div.innerHTML = `
+                <input type="text" class="flex-1 p-2 text-lg outline-none" placeholder="Nom...">
+                <input type="file" class="hidden" accept="image/*" onchange="traiterPhoto(this)">
+                <div onclick="this.previousElementSibling.click()" class="photo-btn">📸</div>
+                <button onclick="this.parentElement.remove()" class="text-red-400 font-bold px-2">X</button>`;
+            cont.appendChild(div);
+        }
+
+        function ajouterLigneEtape() {
+            const cont = document.getElementById('form-etp');
+            const div = document.createElement('div');
+            div.className = 'flex items-start gap-3 bg-white p-4 rounded-2xl border etape-item';
+            div.innerHTML = `
+                <div class="flex flex-col gap-1 items-center">
+                    <button onclick="deplacerEtape(this, -1)" class="move-btn">⬆️</button>
+                    <div class="num-etape bg-green-100 text-green-600 w-8 h-8 rounded-full flex items-center justify-center font-bold"></div>
+                    <button onclick="deplacerEtape(this, 1)" class="move-btn">⬇️</button>
+                </div>
+                <textarea class="flex-1 p-2 text-lg outline-none h-20 resize-none" placeholder="Décris l'étape..."></textarea>
+                <input type="file" class="hidden" accept="image/*" onchange="traiterPhoto(this)">
+                <div onclick="this.previousElementSibling.click()" class="photo-btn">📸</div>
+                <button onclick="this.parentElement.remove(); renumeroter();" class="text-red-400 font-bold px-2">X</button>`;
+            cont.appendChild(div);
+            renumeroter();
+        }
+
+        function renumeroter() {
+            document.querySelectorAll('.num-etape').forEach((el, i) => el.innerText = i + 1);
+        }
+
+        function deplacerEtape(btn, direction) {
+            const item = btn.closest('.etape-item');
+            if (direction === -1 && item.previousElementSibling) item.parentNode.insertBefore(item, item.previousElementSibling);
+            if (direction === 1 && item.nextElementSibling) item.parentNode.insertBefore(item.nextElementSibling, item);
+            renumeroter();
+        }
+
+        // ===== SAUVEGARDE =====
+        async function validerRecette() {
+            const titre = document.getElementById('form-titre').value.trim();
+            if (!titre) return alert('Donne un titre !');
+
+            const collecter = (id) => Array.from(document.querySelectorAll(`#${id} > div`)).map(row => ({
+                name: row.querySelector('input[type=text]') ? row.querySelector('input[type=text]').value : '',
+                text: row.querySelector('textarea') ? row.querySelector('textarea').value : '',
+                img: row.querySelector('img') ? row.querySelector('img').src : ''
+            })).filter(i => i.name || i.text || i.img);
+
+            const id = document.getElementById('edit-id').value || Date.now().toString();
+            const estNouveau = !document.getElementById('edit-id').value;
+
+            afficherLoader(true);
+
+            // Upsert recette
+            await sb.from('recettes').upsert({ id, titre, img_principale: photoPrincipaleData });
+
+            // Supprimer les anciens enfants si édition
+            if (!estNouveau) {
+                await Promise.all([
+                    sb.from('ingredients').delete().eq('recette_id', id),
+                    sb.from('materiel').delete().eq('recette_id', id),
+                    sb.from('etapes').delete().eq('recette_id', id),
+                ]);
+            }
+
+            // Insérer les nouveaux
+            const ings = collecter('form-ing').map((i, idx) => ({ recette_id: id, nom: i.name, img: i.img, ordre: idx }));
+            const mats = collecter('form-mat').map((m, idx) => ({ recette_id: id, nom: m.name, img: m.img, ordre: idx }));
+            const etps = collecter('form-etp').map((e, idx) => ({ recette_id: id, texte: e.text, img: e.img, ordre: idx }));
+
+            await Promise.all([
+                ings.length ? sb.from('ingredients').insert(ings) : Promise.resolve(),
+                mats.length ? sb.from('materiel').insert(mats) : Promise.resolve(),
+                etps.length ? sb.from('etapes').insert(etps) : Promise.resolve(),
+            ]);
+
+            await chargerToutesLesRecettes();
+        }
+
+        // ===== SUPPRESSION =====
+        async function supprimerRecette(id) {
+            if (!confirm('Supprimer cette recette ?')) return;
+            afficherLoader(true);
+            await sb.from('recettes').delete().eq('id', id);
+            await chargerToutesLesRecettes();
+        }
+
+        // ===== ÉDITION =====
+        function editerRecette(id) {
+            const rec = recettes.find(r => r.id === id);
+            ouvrirCreation();
+            document.getElementById('edit-id').value = rec.id;
+            document.getElementById('form-titre').value = rec.titre;
+            photoPrincipaleData = rec.imgPrincipale || "";
+            if (photoPrincipaleData) document.getElementById('preview-img-principale').innerHTML = `<img src="${photoPrincipaleData}" class="w-full h-full object-cover">`;
+
+            const remplir = (containerId, data, addFn) => {
+                const cont = document.getElementById(containerId);
+                cont.innerHTML = '';
+                data.forEach(item => {
+                    addFn(containerId);
+                    let last = cont.lastElementChild;
+                    if (last.querySelector('input[type=text]')) last.querySelector('input[type=text]').value = item.name;
+                    if (last.querySelector('textarea')) last.querySelector('textarea').value = item.text;
+                    if (item.img) last.querySelector('.photo-btn').innerHTML = `<img src="${item.img}">`;
+                });
+            };
+            remplir('form-ing', rec.ingredients, () => ajouterLigne('form-ing'));
+            remplir('form-mat', rec.materiel, () => ajouterLigne('form-mat'));
+            remplir('form-etp', rec.etapes, () => ajouterLigneEtape());
+            basculer('ecran-form');
+        }
+
+        // ===== DIAPORAMA =====
+        function lancerDiapo(id) {
+            recetteActuelle = recettes.find(r => r.id === id);
+            diapoIndex = 0; basculer('ecran-play'); afficherDiapo();
+        }
+
+        function afficherDiapo() {
+            const zone = document.getElementById('play-zone');
+            document.getElementById('play-progres').innerText = recetteActuelle.titre;
+            zone.innerHTML = '';
+            document.querySelector('.arrow-prev').style.opacity = (diapoIndex === 0) ? '0.2' : '1';
+            if (diapoIndex === 0) {
+                zone.innerHTML = `<div class="h-full w-full flex flex-col md:flex-row gap-8 items-stretch max-w-7xl mx-auto"><div class="flex-1 bg-orange-50 p-8 rounded-[40px] border-4 border-orange-100 overflow-y-auto"><h3 class="text-3xl font-bold mb-6 text-orange-600">🛒 Ingrédients</h3><div class="grid grid-cols-2 gap-4">${recetteActuelle.ingredients.map(i => `<div class="flex flex-col items-center bg-white p-4 rounded-3xl shadow-sm border">${i.img ? `<img src="${i.img}" class="h-24 w-24 object-contain mb-2">` : '<span class="text-4xl">🍎</span>'}<span class="text-xl font-bold text-center">${i.name}</span></div>`).join('')}</div></div><div class="flex-1 bg-blue-50 p-8 rounded-[40px] border-4 border-blue-100 overflow-y-auto"><h3 class="text-3xl font-bold mb-6 text-blue-600">🥣 Matériel</h3><div class="grid grid-cols-2 gap-4">${recetteActuelle.materiel.map(m => `<div class="flex flex-col items-center bg-white p-4 rounded-3xl shadow-sm border">${m.img ? `<img src="${m.img}" class="h-24 w-24 object-contain mb-2">` : '<span class="text-4xl">🍴</span>'}<span class="text-xl font-bold text-center">${m.name}</span></div>`).join('')}</div></div></div>`;
+            } else {
+                const etape = recetteActuelle.etapes[diapoIndex - 1];
+                zone.innerHTML = `<div class="h-full w-full flex flex-col md:flex-row gap-10 items-center justify-center max-w-7xl mx-auto"><div class="md:w-1/3 text-left"><div class="text-3xl font-bold text-green-500 mb-4">Étape ${diapoIndex} / ${recetteActuelle.etapes.length}</div><p class="text-4xl leading-tight font-bold text-slate-800">${etape.text}</p></div><div class="md:w-2/3 h-full flex items-center justify-center">${etape.img ? `<img src="${etape.img}" class="max-w-full max-h-full rounded-[40px] shadow-2xl border-[15px] border-white object-contain">` : `<div class="bg-slate-50 w-full h-80 rounded-[40px] flex items-center justify-center text-9xl opacity-20 border-4 border-dashed">🍳</div>`}</div></div>`;
+            }
+            relancerVoix();
+        }
+
+        function changerDiapo(dir) {
+            diapoIndex += dir;
+            if (diapoIndex < 0) diapoIndex = 0;
+            if (diapoIndex > recetteActuelle.etapes.length) diapoIndex = recetteActuelle.etapes.length;
+            afficherDiapo();
+        }
+
+        function relancerVoix() {
+            speechSynthesis.cancel();
+            const t = diapoIndex === 0 ? `Préparons la recette : ${recetteActuelle.titre}` : recetteActuelle.etapes[diapoIndex-1].text;
+            if (!t) return;
+            const ut = new SpeechSynthesisUtterance(t); ut.lang = 'fr-FR'; ut.rate = 0.9;
+            speechSynthesis.speak(ut);
+        }
+
+        // ===== NAVIGATION =====
+        function basculer(ecran) {
+            document.querySelectorAll('#ecran-accueil, #ecran-form, #ecran-play').forEach(el => el.classList.add('hidden'));
+            document.getElementById(ecran).classList.remove('hidden');
+            if (ecran !== 'ecran-play') speechSynthesis.cancel();
+        }
+
+        // ===== IMAGES =====
+        async function compressImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let w = img.width, h = img.height;
+                        const MAX = 1000;
+                        if (w > h) { if (w > MAX) { h *= MAX/w; w = MAX; } } else { if (h > MAX) { w *= MAX/h; h = MAX; } }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function traiterPhotoPrincipale(input) {
+            if (input.files && input.files[0]) {
+                photoPrincipaleData = await compressImage(input.files[0]);
+                document.getElementById('preview-img-principale').innerHTML = `<img src="${photoPrincipaleData}" class="w-full h-full object-cover">`;
+            }
+        }
+
+        async function traiterPhoto(input) {
+            if (input.files && input.files[0]) {
+                const data = await compressImage(input.files[0]);
+                const cont = input.parentElement.querySelector('.photo-btn');
+                cont.innerHTML = `<img src="${data}">`;
+            }
+        }
+
+        // ===== EXPORT / IMPORT JSON =====
+        function exportRecettes() {
+            const blob = new Blob([JSON.stringify(recettes, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = 'sauvegarde_livre.json'; a.click();
+        }
+
+        async function importerRecettes(input) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const items = JSON.parse(e.target.result);
+                afficherLoader(true);
+                for (const rec of items) {
+                    await sb.from('recettes').upsert({ id: rec.id, titre: rec.titre, img_principale: rec.imgPrincipale || '' });
+                    await sb.from('ingredients').delete().eq('recette_id', rec.id);
+                    await sb.from('materiel').delete().eq('recette_id', rec.id);
+                    await sb.from('etapes').delete().eq('recette_id', rec.id);
+                    if (rec.ingredients?.length) await sb.from('ingredients').insert(rec.ingredients.map((i, idx) => ({ recette_id: rec.id, nom: i.name, img: i.img || '', ordre: idx })));
+                    if (rec.materiel?.length) await sb.from('materiel').insert(rec.materiel.map((m, idx) => ({ recette_id: rec.id, nom: m.name, img: m.img || '', ordre: idx })));
+                    if (rec.etapes?.length) await sb.from('etapes').insert(rec.etapes.map((et, idx) => ({ recette_id: rec.id, texte: et.text, img: et.img || '', ordre: idx })));
+                }
+                await chargerToutesLesRecettes();
+                alert('✅ Importé avec succès !');
+            };
+            reader.readAsText(input.files[0]);
+        }
+
+        // ===== IMPRESSION =====
+        function imprimerRecette(id) {
+            const rec = recettes.find(r => r.id === id);
+            if (!rec) return;
+            const couv = rec.imgPrincipale ? `<img src="${rec.imgPrincipale}" class="print-cover">` : `<div class="print-cover-placeholder">🥘</div>`;
+            const ingredients = rec.ingredients.map(i => `<div class="print-item">${i.img ? `<img src="${i.img}">` : '🍎'}<span>${i.name}</span></div>`).join('') || '<div class="print-item" style="color:#94a3b8">Aucun ingrédient</div>';
+            const materiel = rec.materiel.map(m => `<div class="print-item">${m.img ? `<img src="${m.img}">` : '🍴'}<span>${m.name}</span></div>`).join('') || '<div class="print-item" style="color:#94a3b8">Aucun matériel</div>';
+            const etapes = rec.etapes.map((e, idx) => `<div class="print-etape"><div class="print-num">${idx + 1}</div><div class="print-etape-text">${e.text}</div>${e.img ? `<img src="${e.img}" class="print-etape-img">` : ''}</div>`).join('') || '<p style="color:#94a3b8">Aucune étape</p>';
+
+            const zone = document.getElementById('ecran-impression');
+            zone.innerHTML = `
+                <div class="print-header">${couv}<div><div class="print-title">${rec.titre}</div><div style="color:#94a3b8;font-weight:600;margin-top:4px">${rec.etapes.length} étape${rec.etapes.length > 1 ? 's' : ''} · ${rec.ingredients.length} ingrédient${rec.ingredients.length > 1 ? 's' : ''}</div></div></div>
+                <div class="print-grid"><div class="print-col"><div class="print-section-title" style="color:#f97316">🛒 Ingrédients</div>${ingredients}</div><div class="print-col"><div class="print-section-title" style="color:#3b82f6">🥣 Matériel</div>${materiel}</div></div>
+                <div><div class="print-section-title" style="color:#22c55e">👨‍🍳 Étapes</div>${etapes}</div>`;
+
+            const imgs = Array.from(zone.querySelectorAll('img'));
+            if (imgs.length === 0) { window.print(); return; }
+            let chargees = 0;
+            const verifier = () => { if (++chargees >= imgs.length) window.print(); };
+            imgs.forEach(img => { if (img.complete) verifier(); else { img.onload = verifier; img.onerror = verifier; } });
+        }
+
+        // ===== INIT =====
+        chargerToutesLesRecettes();
+    </script>
+</body>
+</html>
