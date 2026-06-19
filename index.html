@@ -81,8 +81,9 @@
             </div>
             <div class="flex gap-4 flex-wrap justify-center">
                 <button onclick="demanderAdmin(ouvrirCreation)" class="btn-picto">➕</button>
-                <button onclick="document.getElementById('import-file').click()" class="btn-picto" style="border-color: #22c55e;">📂</button>
-                <button onclick="exportRecettes()" class="btn-picto" style="border-color: #3b82f6;">💾</button>
+                <button onclick="demanderAdmin(() => document.getElementById('import-file').click())" class="btn-picto" style="border-color: #22c55e;">📂</button>
+                <button onclick="demanderAdmin(exportRecettes)" class="btn-picto" style="border-color: #3b82f6;">💾</button>
+                <button id="btn-migration" onclick="demanderAdmin(migrerImagesVersStorage)" class="btn-picto hidden" style="border-color: #a855f7;" title="Migrer les anciennes photos vers le stockage">🔄</button>
                 <input type="file" id="import-file" class="hidden" accept=".json" onchange="importerRecettes(this)">
             </div>
         </header>
@@ -152,6 +153,7 @@
             if (saisi === 'recettesjdv') {
                 estAdmin = true;
                 document.getElementById('modal-mdp').classList.add('hidden');
+                document.getElementById('btn-migration').classList.remove('hidden');
                 if (callbackAdmin) { callbackAdmin(); callbackAdmin = null; }
             } else {
                 document.getElementById('mdp-erreur').classList.remove('hidden');
@@ -191,9 +193,9 @@
                     id: rec.id,
                     titre: rec.titre,
                     imgPrincipale: rec.img_principale || '',
-                    ingredients: (ing || []).map(i => ({ name: i.nom, img: i.img || '' })),
-                    materiel: (mat || []).map(m => ({ name: m.nom, img: m.img || '' })),
-                    etapes: (etp || []).map(e => ({ text: e.texte, img: e.img || '' })),
+                    ingredients: (ing || []).map(i => ({ id: i.id, name: i.nom, img: i.img || '' })),
+                    materiel: (mat || []).map(m => ({ id: m.id, name: m.nom, img: m.img || '' })),
+                    etapes: (etp || []).map(e => ({ id: e.id, text: e.texte, img: e.img || '' })),
                 };
             }));
 
@@ -484,7 +486,7 @@
                         if (w > h) { if (w > MAX) { h *= MAX/w; w = MAX; } } else { if (h > MAX) { w *= MAX/h; h = MAX; } }
                         canvas.width = w; canvas.height = h;
                         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
                     };
                     img.src = e.target.result;
                 };
@@ -492,18 +494,87 @@
             });
         }
 
+        async function uploadVersStorage(blob) {
+            const nom = `img_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+            const { error } = await sb.storage.from('images').upload(nom, blob, { contentType: 'image/jpeg' });
+            if (error) throw error;
+            const { data } = sb.storage.from('images').getPublicUrl(nom);
+            return data.publicUrl;
+        }
+
+        function base64VersBlob(base64) {
+            const [header, data] = base64.split(',');
+            const mime = header.match(/:(.*?);/)[1];
+            const binary = atob(data);
+            const arr = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+            return new Blob([arr], { type: mime });
+        }
+
         async function traiterPhotoPrincipale(input) {
             if (input.files && input.files[0]) {
-                photoPrincipaleData = await compressImage(input.files[0]);
-                document.getElementById('preview-img-principale').innerHTML = `<img src="${photoPrincipaleData}" class="w-full h-full object-cover">`;
+                try {
+                    const blob = await compressImage(input.files[0]);
+                    const url = await uploadVersStorage(blob);
+                    photoPrincipaleData = url;
+                    document.getElementById('preview-img-principale').innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
+                } catch (err) {
+                    alert('❌ Erreur upload photo : ' + (err.message || err));
+                }
             }
         }
 
         async function traiterPhoto(input) {
             if (input.files && input.files[0]) {
-                const data = await compressImage(input.files[0]);
-                const cont = input.parentElement.querySelector('.photo-btn');
-                cont.innerHTML = `<img src="${data}">`;
+                try {
+                    const blob = await compressImage(input.files[0]);
+                    const url = await uploadVersStorage(blob);
+                    const cont = input.parentElement.querySelector('.photo-btn');
+                    cont.innerHTML = `<img src="${url}">`;
+                } catch (err) {
+                    alert('❌ Erreur upload photo : ' + (err.message || err));
+                }
+            }
+        }
+
+        // ===== MIGRATION BASE64 → STORAGE =====
+        async function migrerImagesVersStorage() {
+            let migrées = 0;
+            afficherLoader(true);
+            try {
+                for (const rec of recettes) {
+                    if (rec.imgPrincipale?.startsWith('data:')) {
+                        const url = await uploadVersStorage(base64VersBlob(rec.imgPrincipale));
+                        await sb.from('recettes').update({ img_principale: url }).eq('id', rec.id);
+                        migrées++;
+                    }
+                    for (const ing of rec.ingredients) {
+                        if (ing.img?.startsWith('data:')) {
+                            const url = await uploadVersStorage(base64VersBlob(ing.img));
+                            await sb.from('ingredients').update({ img: url }).eq('id', ing.id);
+                            migrées++;
+                        }
+                    }
+                    for (const mat of rec.materiel) {
+                        if (mat.img?.startsWith('data:')) {
+                            const url = await uploadVersStorage(base64VersBlob(mat.img));
+                            await sb.from('materiel').update({ img: url }).eq('id', mat.id);
+                            migrées++;
+                        }
+                    }
+                    for (const etp of rec.etapes) {
+                        if (etp.img?.startsWith('data:')) {
+                            const url = await uploadVersStorage(base64VersBlob(etp.img));
+                            await sb.from('etapes').update({ img: url }).eq('id', etp.id);
+                            migrées++;
+                        }
+                    }
+                }
+                await chargerToutesLesRecettes();
+                alert(`✅ Migration terminée ! ${migrées} image${migrées > 1 ? 's' : ''} transférée${migrées > 1 ? 's' : ''} vers le stockage.`);
+            } catch (err) {
+                afficherLoader(false);
+                alert('❌ Erreur durant la migration : ' + (err.message || err));
             }
         }
 
@@ -559,4 +630,19 @@
                 </div>
                 <div class="print-page">
                     ${soustitre('👨‍🍳 Étapes', '#22c55e')}
-                    <div class="print-section-title" style="color:#22c55e">👨‍🍳
+                    <div class="print-section-title" style="color:#22c55e">👨‍🍳 Étapes</div>
+                    ${etapes}
+                </div>`;
+
+            const imgs = Array.from(zone.querySelectorAll('img'));
+            if (imgs.length === 0) { window.print(); return; }
+            let chargees = 0;
+            const verifier = () => { if (++chargees >= imgs.length) window.print(); };
+            imgs.forEach(img => { if (img.complete) verifier(); else { img.onload = verifier; img.onerror = verifier; } });
+        }
+
+        // ===== INIT =====
+        chargerToutesLesRecettes();
+    </script>
+</body>
+</html>
