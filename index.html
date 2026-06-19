@@ -181,7 +181,11 @@
         async function chargerToutesLesRecettes() {
             afficherLoader(true);
             const { data: recs, error } = await sb.from('recettes').select('*').order('created_at');
-            if (error) { console.error(error); afficherLoader(false); return; }
+            if (error) {
+                afficherLoader(false);
+                alert('❌ Impossible de charger les recettes :\n' + error.message + '\n\nVérifie ta connexion internet.');
+                return;
+            }
 
             recettes = await Promise.all(recs.map(async (rec) => {
                 const [{ data: ing }, { data: mat }, { data: etp }] = await Promise.all([
@@ -539,39 +543,39 @@
 
         // ===== MIGRATION BASE64 → STORAGE =====
         async function migrerImagesVersStorage() {
-            let migrées = 0;
+            let nbMigrees = 0;
             afficherLoader(true);
             try {
                 for (const rec of recettes) {
                     if (rec.imgPrincipale?.startsWith('data:')) {
                         const url = await uploadVersStorage(base64VersBlob(rec.imgPrincipale));
                         await sb.from('recettes').update({ img_principale: url }).eq('id', rec.id);
-                        migrées++;
+                        nbMigrees++;
                     }
                     for (const ing of rec.ingredients) {
                         if (ing.img?.startsWith('data:')) {
                             const url = await uploadVersStorage(base64VersBlob(ing.img));
                             await sb.from('ingredients').update({ img: url }).eq('id', ing.id);
-                            migrées++;
+                            nbMigrees++;
                         }
                     }
                     for (const mat of rec.materiel) {
                         if (mat.img?.startsWith('data:')) {
                             const url = await uploadVersStorage(base64VersBlob(mat.img));
                             await sb.from('materiel').update({ img: url }).eq('id', mat.id);
-                            migrées++;
+                            nbMigrees++;
                         }
                     }
                     for (const etp of rec.etapes) {
                         if (etp.img?.startsWith('data:')) {
                             const url = await uploadVersStorage(base64VersBlob(etp.img));
                             await sb.from('etapes').update({ img: url }).eq('id', etp.id);
-                            migrées++;
+                            nbMigrees++;
                         }
                     }
                 }
                 await chargerToutesLesRecettes();
-                alert(`✅ Migration terminée ! ${migrées} image${migrées > 1 ? 's' : ''} transférée${migrées > 1 ? 's' : ''} vers le stockage.`);
+                alert(`✅ Migration terminée ! ${nbMigrees} image${nbMigrees > 1 ? 's' : ''} transferee${nbMigrees > 1 ? 's' : ''} vers le stockage.`);
             } catch (err) {
                 afficherLoader(false);
                 alert('❌ Erreur durant la migration : ' + (err.message || err));
