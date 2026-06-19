@@ -305,30 +305,37 @@
 
             afficherLoader(true);
 
-            // Upsert recette
-            await sb.from('recettes').upsert({ id, titre, img_principale: photoPrincipaleData });
+            try {
+                const { error: errRec } = await sb.from('recettes').upsert({ id, titre, img_principale: photoPrincipaleData });
+                if (errRec) throw errRec;
 
-            // Supprimer les anciens enfants si édition
-            if (!estNouveau) {
-                await Promise.all([
-                    sb.from('ingredients').delete().eq('recette_id', id),
-                    sb.from('materiel').delete().eq('recette_id', id),
-                    sb.from('etapes').delete().eq('recette_id', id),
+                if (!estNouveau) {
+                    const suppression = await Promise.all([
+                        sb.from('ingredients').delete().eq('recette_id', id),
+                        sb.from('materiel').delete().eq('recette_id', id),
+                        sb.from('etapes').delete().eq('recette_id', id),
+                    ]);
+                    const errSupp = suppression.find(r => r.error);
+                    if (errSupp) throw errSupp.error;
+                }
+
+                const ings = collecter('form-ing').map((i, idx) => ({ recette_id: id, nom: i.name, img: i.img, ordre: idx }));
+                const mats = collecter('form-mat').map((m, idx) => ({ recette_id: id, nom: m.name, img: m.img, ordre: idx }));
+                const etps = collecter('form-etp').map((e, idx) => ({ recette_id: id, texte: e.text, img: e.img, ordre: idx }));
+
+                const insertions = await Promise.all([
+                    ings.length ? sb.from('ingredients').insert(ings) : Promise.resolve({}),
+                    mats.length ? sb.from('materiel').insert(mats) : Promise.resolve({}),
+                    etps.length ? sb.from('etapes').insert(etps) : Promise.resolve({}),
                 ]);
+                const errIns = insertions.find(r => r && r.error);
+                if (errIns) throw errIns.error;
+
+                await chargerToutesLesRecettes();
+            } catch (err) {
+                afficherLoader(false);
+                alert('❌ Erreur lors de la sauvegarde :\n' + (err.message || JSON.stringify(err)) + '\n\nVérifie ta connexion internet et réessaie.');
             }
-
-            // Insérer les nouveaux
-            const ings = collecter('form-ing').map((i, idx) => ({ recette_id: id, nom: i.name, img: i.img, ordre: idx }));
-            const mats = collecter('form-mat').map((m, idx) => ({ recette_id: id, nom: m.name, img: m.img, ordre: idx }));
-            const etps = collecter('form-etp').map((e, idx) => ({ recette_id: id, texte: e.text, img: e.img, ordre: idx }));
-
-            await Promise.all([
-                ings.length ? sb.from('ingredients').insert(ings) : Promise.resolve(),
-                mats.length ? sb.from('materiel').insert(mats) : Promise.resolve(),
-                etps.length ? sb.from('etapes').insert(etps) : Promise.resolve(),
-            ]);
-
-            await chargerToutesLesRecettes();
         }
 
         // ===== SUPPRESSION =====
@@ -552,19 +559,4 @@
                 </div>
                 <div class="print-page">
                     ${soustitre('👨‍🍳 Étapes', '#22c55e')}
-                    <div class="print-section-title" style="color:#22c55e">👨‍🍳 Étapes</div>
-                    ${etapes}
-                </div>`;
-
-            const imgs = Array.from(zone.querySelectorAll('img'));
-            if (imgs.length === 0) { window.print(); return; }
-            let chargees = 0;
-            const verifier = () => { if (++chargees >= imgs.length) window.print(); };
-            imgs.forEach(img => { if (img.complete) verifier(); else { img.onload = verifier; img.onerror = verifier; } });
-        }
-
-        // ===== INIT =====
-        chargerToutesLesRecettes();
-    </script>
-</body>
-</html>
+                    <div class="print-section-title" style="color:#22c55e">👨‍🍳
